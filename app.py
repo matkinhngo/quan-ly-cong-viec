@@ -15,7 +15,6 @@ def load_users():
                 raise ValueError("Empty users.json")
             return users
     except:
-        # Khởi tạo user mặc định nếu file lỗi/trống
         default_users = [{"username": "admin", "password": "admin123", "role": "admin"}]
         save_users(default_users)
         return default_users
@@ -24,9 +23,7 @@ def load_tasks():
     try:
         with open('tasks.json', 'r', encoding='utf-8') as f:
             tasks = json.load(f)
-            if not tasks:
-                return []
-            return tasks
+            return tasks or []
     except:
         return []
 
@@ -48,12 +45,10 @@ def login(users):
     if st.sidebar.button("Đăng nhập"):
         user = next((u for u in users if u['username'] == username and u['password'] == password), None)
         if user:
-            st.session_state['user'] = user
-            st.success(f"Xin chào, {username} ({user['role']})")
-            st.experimental_rerun()
+            st.session_state.user = user  # Lưu user vào session
+            st.sidebar.success(f"✅ Xin chào, {username} ({user['role']})")
         else:
-            st.error("❌ Sai tên đăng nhập hoặc mật khẩu")
-    return st.session_state.get('user')
+            st.sidebar.error("❌ Sai tên đăng nhập hoặc mật khẩu")
 
 # ----------------------
 # Dashboard
@@ -61,9 +56,11 @@ def login(users):
 def dashboard(tasks, user):
     st.title("📊 Dashboard Tổng Quan")
     user_tasks = [t for t in tasks if user['role'] == 'admin' or t['group'] == user.get('group')]
+
     if not user_tasks:
         st.info("📭 Chưa có công việc nào.")
         return
+
     df = pd.DataFrame(user_tasks)
     col1, col2 = st.columns(2)
     with col1:
@@ -79,6 +76,7 @@ def dashboard(tasks, user):
 def task_manager(tasks, user):
     st.title("📋 Quản Lý Công Việc")
     user_tasks = [t for t in tasks if user['role'] == 'admin' or t['group'] == user.get('group')]
+
     if user_tasks:
         df = pd.DataFrame(user_tasks)
         st.dataframe(df, use_container_width=True)
@@ -108,7 +106,6 @@ def task_manager(tasks, user):
                 tasks.append(new_task)
                 save_tasks(tasks)
                 st.success("✅ Đã tạo công việc!")
-                st.experimental_rerun()
 
 # ----------------------
 # Quản lý người dùng
@@ -140,21 +137,20 @@ def user_manager(users, current_user):
                 users.append(new_user)
                 save_users(users)
                 st.success("✅ Đã thêm người dùng mới.")
-                st.experimental_rerun()
 
 # ----------------------
 # Main App
 # ----------------------
 def main():
     st.set_page_config(page_title="Quản Lý Công Việc", layout="wide")
-    if 'user' not in st.session_state:
-        st.session_state['user'] = None
+    if "user" not in st.session_state:
+        st.session_state.user = None
 
     users = load_users()
     tasks = load_tasks()
-    user = st.session_state['user'] or login(users)
 
-    if user:
+    if st.session_state.user:
+        user = st.session_state.user
         menu = ["🏠 Trang Chủ", "📋 Công Việc", "👥 Người Dùng", "📊 Báo Cáo"]
         choice = st.sidebar.radio("📌 Menu", menu)
 
@@ -166,6 +162,12 @@ def main():
             user_manager(users, user)
         elif choice == "📊 Báo Cáo":
             dashboard(tasks, user)
+
+        if st.sidebar.button("🚪 Đăng xuất"):
+            st.session_state.user = None
+            st.experimental_rerun()
+    else:
+        login(users)
 
 if __name__ == "__main__":
     main()
