@@ -55,7 +55,7 @@ def dashboard(tasks, user):
             st.plotly_chart(fig)
 
 # ----------------------
-# Task Management
+# Task Management (CRUD)
 # ----------------------
 def manage_tasks(tasks, user):
     st.title("📋 Danh sách công việc")
@@ -65,8 +65,13 @@ def manage_tasks(tasks, user):
         view_tasks = [t for t in tasks if t['group'] == user['group']]
     
     df = pd.DataFrame(view_tasks)
-    st.dataframe(df)
 
+    if df.empty:
+        st.warning("📭 Nhóm bạn chưa có công việc nào!")
+    else:
+        st.dataframe(df, use_container_width=True)
+
+    # -------- Tạo công việc mới --------
     if user['role'] in ['admin', 'quanly']:
         st.subheader("➕ Tạo công việc mới")
         with st.form("create_task"):
@@ -90,6 +95,31 @@ def manage_tasks(tasks, user):
                 tasks.append(new_task)
                 save_tasks(tasks)
                 st.success("✅ Đã tạo công việc!")
+
+    # -------- Sửa / Xóa công việc --------
+    if user['role'] in ['admin', 'quanly']:
+        st.subheader("✏️ Sửa hoặc 🗑 Xóa công việc")
+        task_ids = [t['task_id'] for t in view_tasks]
+        selected_task_id = st.selectbox("Chọn Task ID", task_ids)
+        selected_task = next((t for t in tasks if t['task_id'] == selected_task_id), None)
+
+        if selected_task:
+            new_title = st.text_input("Tiêu đề mới", selected_task['title'])
+            new_description = st.text_area("Mô tả mới", selected_task['description'])
+            new_status = st.selectbox("Trạng thái", ["Todo", "Đang làm", "Hoàn thành"], index=["Todo", "Đang làm", "Hoàn thành"].index(selected_task['status']))
+            new_deadline = st.date_input("Deadline mới", pd.to_datetime(selected_task['deadline']))
+            if st.button("💾 Lưu thay đổi"):
+                selected_task['title'] = new_title
+                selected_task['description'] = new_description
+                selected_task['status'] = new_status
+                selected_task['deadline'] = str(new_deadline)
+                save_tasks(tasks)
+                st.success("✅ Đã cập nhật công việc!")
+
+            if st.button("🗑 Xóa công việc"):
+                tasks.remove(selected_task)
+                save_tasks(tasks)
+                st.success("🗑 Đã xóa công việc!")
 
 # ----------------------
 # Main App
