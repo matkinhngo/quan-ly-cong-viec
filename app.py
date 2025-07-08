@@ -10,15 +10,23 @@ from datetime import datetime
 def load_users():
     try:
         with open('users.json', 'r', encoding='utf-8') as f:
-            return json.load(f)
+            users = json.load(f)
+            if not users:
+                raise ValueError("Empty users.json")
+            return users
     except:
-        # User mặc định nếu file trống
-        return [{"username": "admin", "password": "admin123", "role": "admin"}]
+        # Khởi tạo user mặc định nếu file lỗi/trống
+        default_users = [{"username": "admin", "password": "admin123", "role": "admin"}]
+        save_users(default_users)
+        return default_users
 
 def load_tasks():
     try:
         with open('tasks.json', 'r', encoding='utf-8') as f:
-            return json.load(f)
+            tasks = json.load(f)
+            if not tasks:
+                return []
+            return tasks
     except:
         return []
 
@@ -34,19 +42,18 @@ def save_tasks(tasks):
 # Login
 # ----------------------
 def login(users):
-    with st.sidebar.form("login_form"):
-        st.title("🔐 Đăng nhập")
-        username = st.text_input("👤 Tên đăng nhập")
-        password = st.text_input("🔑 Mật khẩu", type="password")
-        submitted = st.form_submit_button("Đăng nhập")
-        if submitted:
-            user = next((u for u in users if u['username'] == username and u['password'] == password), None)
-            if user:
-                st.success(f"Xin chào, {username} ({user['role']})")
-                return user
-            else:
-                st.error("❌ Sai tên đăng nhập hoặc mật khẩu")
-    return None
+    st.sidebar.title("🔐 Đăng nhập")
+    username = st.sidebar.text_input("👤 Tên đăng nhập")
+    password = st.sidebar.text_input("🔑 Mật khẩu", type="password")
+    if st.sidebar.button("Đăng nhập"):
+        user = next((u for u in users if u['username'] == username and u['password'] == password), None)
+        if user:
+            st.session_state['user'] = user
+            st.success(f"Xin chào, {username} ({user['role']})")
+            st.experimental_rerun()
+        else:
+            st.error("❌ Sai tên đăng nhập hoặc mật khẩu")
+    return st.session_state.get('user')
 
 # ----------------------
 # Dashboard
@@ -54,11 +61,9 @@ def login(users):
 def dashboard(tasks, user):
     st.title("📊 Dashboard Tổng Quan")
     user_tasks = [t for t in tasks if user['role'] == 'admin' or t['group'] == user.get('group')]
-
     if not user_tasks:
         st.info("📭 Chưa có công việc nào.")
         return
-
     df = pd.DataFrame(user_tasks)
     col1, col2 = st.columns(2)
     with col1:
@@ -73,17 +78,13 @@ def dashboard(tasks, user):
 # ----------------------
 def task_manager(tasks, user):
     st.title("📋 Quản Lý Công Việc")
-
-    # Filter tasks theo quyền
     user_tasks = [t for t in tasks if user['role'] == 'admin' or t['group'] == user.get('group')]
-
     if user_tasks:
         df = pd.DataFrame(user_tasks)
         st.dataframe(df, use_container_width=True)
     else:
-        st.info("📭 Không có công việc nào để hiển thị.")
+        st.info("📭 Không có công việc nào.")
 
-    # Tạo công việc mới
     if user['role'] in ['admin', 'quanly']:
         st.subheader("➕ Tạo Công Việc Mới")
         with st.form("new_task_form"):
@@ -93,30 +94,27 @@ def task_manager(tasks, user):
             deadline = st.date_input("Deadline", datetime.now())
             priority = st.selectbox("Độ ưu tiên", ["Cao", "Trung bình", "Thấp"])
             submitted = st.form_submit_button("Tạo")
-            if submitted:
-                if not title or not assigned_to:
-                    st.warning("⚠️ Tiêu đề và Người được giao là bắt buộc.")
-                else:
-                    new_task = {
-                        "task_id": len(tasks) + 1,
-                        "title": title,
-                        "description": description,
-                        "assigned_to": assigned_to,
-                        "status": "Todo",
-                        "deadline": str(deadline),
-                        "priority": priority,
-                        "group": user['group'] if user['role'] == 'quanly' else "Team A"
-                    }
-                    tasks.append(new_task)
-                    save_tasks(tasks)
-                    st.success("✅ Đã tạo công việc!")
+            if submitted and title and assigned_to:
+                new_task = {
+                    "task_id": len(tasks) + 1,
+                    "title": title,
+                    "description": description,
+                    "assigned_to": assigned_to,
+                    "status": "Todo",
+                    "deadline": str(deadline),
+                    "priority": priority,
+                    "group": user['group'] if user['role'] == 'quanly' else "Team A"
+                }
+                tasks.append(new_task)
+                save_tasks(tasks)
+                st.success("✅ Đã tạo công việc!")
+                st.experimental_rerun()
 
 # ----------------------
-# Quản lý người dùng (Admin)
+# Quản lý người dùng
 # ----------------------
 def user_manager(users, current_user):
     st.title("👥 Quản Lý Người Dùng")
-
     if current_user['role'] != 'admin':
         st.warning("⚠️ Bạn không có quyền truy cập.")
         return
@@ -132,7 +130,7 @@ def user_manager(users, current_user):
         role = st.selectbox("Quyền", ["admin", "quanly", "member"])
         group = st.text_input("Nhóm (cho quản lý và member)")
         submitted = st.form_submit_button("Thêm")
-        if submitted:
+        if submitted and username and password:
             if any(u['username'] == username for u in users):
                 st.error("❌ Tên đăng nhập đã tồn tại.")
             else:
@@ -142,15 +140,19 @@ def user_manager(users, current_user):
                 users.append(new_user)
                 save_users(users)
                 st.success("✅ Đã thêm người dùng mới.")
+                st.experimental_rerun()
 
 # ----------------------
 # Main App
 # ----------------------
 def main():
     st.set_page_config(page_title="Quản Lý Công Việc", layout="wide")
+    if 'user' not in st.session_state:
+        st.session_state['user'] = None
+
     users = load_users()
     tasks = load_tasks()
-    user = login(users)
+    user = st.session_state['user'] or login(users)
 
     if user:
         menu = ["🏠 Trang Chủ", "📋 Công Việc", "👥 Người Dùng", "📊 Báo Cáo"]
