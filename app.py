@@ -11,8 +11,11 @@ def load_users():
         return json.load(f)
 
 def load_tasks():
-    with open('tasks.json', 'r', encoding='utf-8') as f:
-        return json.load(f)
+    try:
+        with open('tasks.json', 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except (FileNotFoundError, json.decoder.JSONDecodeError):
+        return []
 
 def save_tasks(tasks):
     with open('tasks.json', 'w', encoding='utf-8') as f:
@@ -41,18 +44,18 @@ def dashboard(tasks, user):
     if user['role'] == 'admin':
         df = pd.DataFrame(tasks)
     else:
-        df = pd.DataFrame([t for t in tasks if t['group'] == user['group']])
+        df = pd.DataFrame([t for t in tasks if t['group'] == user.get('group')])
 
     if df.empty:
-        st.info("📭 Không có công việc nào")
+        st.info("📭 Không có công việc nào để hiển thị.")
     else:
         col1, col2 = st.columns(2)
         with col1:
             fig = px.pie(df, names='status', title='Tỉ lệ công việc theo trạng thái')
-            st.plotly_chart(fig)
+            st.plotly_chart(fig, use_container_width=True)
         with col2:
             fig = px.bar(df, x='assigned_to', color='status', title='Tiến độ theo người phụ trách')
-            st.plotly_chart(fig)
+            st.plotly_chart(fig, use_container_width=True)
 
 # ----------------------
 # Task Management (CRUD)
@@ -62,14 +65,13 @@ def manage_tasks(tasks, user):
     if user['role'] == 'admin':
         view_tasks = tasks
     else:
-        view_tasks = [t for t in tasks if t['group'] == user['group']]
-    
-    df = pd.DataFrame(view_tasks)
+        view_tasks = [t for t in tasks if t['group'] == user.get('group')]
 
-    if df.empty:
-        st.warning("📭 Nhóm bạn chưa có công việc nào!")
-    else:
+    if view_tasks:
+        df = pd.DataFrame(view_tasks)
         st.dataframe(df, use_container_width=True)
+    else:
+        st.info("📭 Không có công việc nào để hiển thị.")
 
     # -------- Tạo công việc mới --------
     if user['role'] in ['admin', 'quanly']:
@@ -97,7 +99,7 @@ def manage_tasks(tasks, user):
                 st.success("✅ Đã tạo công việc!")
 
     # -------- Sửa / Xóa công việc --------
-    if user['role'] in ['admin', 'quanly']:
+    if user['role'] in ['admin', 'quanly'] and view_tasks:
         st.subheader("✏️ Sửa hoặc 🗑 Xóa công việc")
         task_ids = [t['task_id'] for t in view_tasks]
         selected_task_id = st.selectbox("Chọn Task ID", task_ids)
@@ -106,7 +108,8 @@ def manage_tasks(tasks, user):
         if selected_task:
             new_title = st.text_input("Tiêu đề mới", selected_task['title'])
             new_description = st.text_area("Mô tả mới", selected_task['description'])
-            new_status = st.selectbox("Trạng thái", ["Todo", "Đang làm", "Hoàn thành"], index=["Todo", "Đang làm", "Hoàn thành"].index(selected_task['status']))
+            new_status = st.selectbox("Trạng thái", ["Todo", "Đang làm", "Hoàn thành"],
+                                      index=["Todo", "Đang làm", "Hoàn thành"].index(selected_task['status']))
             new_deadline = st.date_input("Deadline mới", pd.to_datetime(selected_task['deadline']))
             if st.button("💾 Lưu thay đổi"):
                 selected_task['title'] = new_title
