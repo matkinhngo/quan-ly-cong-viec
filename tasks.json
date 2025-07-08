@@ -2,7 +2,7 @@
   {
     "task_id": 1,
     "title": "Chuẩn bị báo cáo tuần",
-    "description": "Tổng hợp số liệu GDV",
+    "description": "Tổng hợp số liệu từ GDV",
     "assigned_to": "member",
     "status": "Todo",
     "deadline": "2025-07-15",
