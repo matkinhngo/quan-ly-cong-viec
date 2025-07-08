@@ -12,7 +12,7 @@ def load_users():
         with open('users.json', 'r', encoding='utf-8') as f:
             return json.load(f)
     except:
-        # Tạo user mặc định nếu file trống
+        # User mặc định nếu file trống
         return [{"username": "admin", "password": "admin123", "role": "admin"}]
 
 def load_tasks():
@@ -21,6 +21,10 @@ def load_tasks():
             return json.load(f)
     except:
         return []
+
+def save_users(users):
+    with open('users.json', 'w', encoding='utf-8') as f:
+        json.dump(users, f, indent=2, ensure_ascii=False)
 
 def save_tasks(tasks):
     with open('tasks.json', 'w', encoding='utf-8') as f:
@@ -48,7 +52,7 @@ def login(users):
 # Dashboard
 # ----------------------
 def dashboard(tasks, user):
-    st.title("📊 Tổng Quan Công Việc")
+    st.title("📊 Dashboard Tổng Quan")
     user_tasks = [t for t in tasks if user['role'] == 'admin' or t['group'] == user.get('group')]
 
     if not user_tasks:
@@ -58,29 +62,28 @@ def dashboard(tasks, user):
     df = pd.DataFrame(user_tasks)
     col1, col2 = st.columns(2)
     with col1:
-        fig = px.pie(df, names='status', title='Trạng thái công việc')
+        fig = px.pie(df, names='status', title='Tỉ lệ trạng thái công việc')
         st.plotly_chart(fig, use_container_width=True)
     with col2:
         fig = px.bar(df, x='assigned_to', color='status', title='Tiến độ theo nhân sự')
         st.plotly_chart(fig, use_container_width=True)
 
 # ----------------------
-# Task Management
+# Quản lý công việc
 # ----------------------
 def task_manager(tasks, user):
     st.title("📋 Quản Lý Công Việc")
 
-    # Filter tasks by role
+    # Filter tasks theo quyền
     user_tasks = [t for t in tasks if user['role'] == 'admin' or t['group'] == user.get('group')]
 
-    # Hiển thị bảng công việc
     if user_tasks:
         df = pd.DataFrame(user_tasks)
         st.dataframe(df, use_container_width=True)
     else:
         st.info("📭 Không có công việc nào để hiển thị.")
 
-    # Form tạo công việc
+    # Tạo công việc mới
     if user['role'] in ['admin', 'quanly']:
         st.subheader("➕ Tạo Công Việc Mới")
         with st.form("new_task_form"):
@@ -108,30 +111,37 @@ def task_manager(tasks, user):
                     save_tasks(tasks)
                     st.success("✅ Đã tạo công việc!")
 
-    # Sửa/Xóa công việc
-    if user['role'] in ['admin', 'quanly'] and user_tasks:
-        st.subheader("✏️ Sửa / 🗑 Xóa Công Việc")
-        task_map = {f"{t['task_id']}: {t['title']}": t for t in user_tasks}
-        selected_task_key = st.selectbox("Chọn công việc", list(task_map.keys()))
-        task = task_map[selected_task_key]
+# ----------------------
+# Quản lý người dùng (Admin)
+# ----------------------
+def user_manager(users, current_user):
+    st.title("👥 Quản Lý Người Dùng")
 
-        new_title = st.text_input("Tiêu đề mới", task['title'])
-        new_description = st.text_area("Mô tả mới", task['description'])
-        new_status = st.selectbox("Trạng thái", ["Todo", "Đang làm", "Hoàn thành"], index=["Todo", "Đang làm", "Hoàn thành"].index(task['status']))
-        new_deadline = st.date_input("Deadline mới", pd.to_datetime(task['deadline']))
+    if current_user['role'] != 'admin':
+        st.warning("⚠️ Bạn không có quyền truy cập.")
+        return
 
-        if st.button("💾 Lưu thay đổi"):
-            task['title'] = new_title
-            task['description'] = new_description
-            task['status'] = new_status
-            task['deadline'] = str(new_deadline)
-            save_tasks(tasks)
-            st.success("✅ Công việc đã được cập nhật.")
+    st.subheader("📄 Danh sách người dùng")
+    df = pd.DataFrame(users)
+    st.dataframe(df, use_container_width=True)
 
-        if st.button("🗑 Xóa công việc"):
-            tasks.remove(task)
-            save_tasks(tasks)
-            st.success("🗑 Đã xóa công việc!")
+    st.subheader("➕ Thêm Người Dùng")
+    with st.form("add_user_form"):
+        username = st.text_input("Tên đăng nhập mới")
+        password = st.text_input("Mật khẩu")
+        role = st.selectbox("Quyền", ["admin", "quanly", "member"])
+        group = st.text_input("Nhóm (cho quản lý và member)")
+        submitted = st.form_submit_button("Thêm")
+        if submitted:
+            if any(u['username'] == username for u in users):
+                st.error("❌ Tên đăng nhập đã tồn tại.")
+            else:
+                new_user = {"username": username, "password": password, "role": role}
+                if role in ['quanly', 'member']:
+                    new_user['group'] = group
+                users.append(new_user)
+                save_users(users)
+                st.success("✅ Đã thêm người dùng mới.")
 
 # ----------------------
 # Main App
@@ -143,13 +153,17 @@ def main():
     user = login(users)
 
     if user:
-        menu = ["🏠 Dashboard", "📋 Công Việc"]
+        menu = ["🏠 Trang Chủ", "📋 Công Việc", "👥 Người Dùng", "📊 Báo Cáo"]
         choice = st.sidebar.radio("📌 Menu", menu)
 
-        if choice == "🏠 Dashboard":
+        if choice == "🏠 Trang Chủ":
             dashboard(tasks, user)
         elif choice == "📋 Công Việc":
             task_manager(tasks, user)
+        elif choice == "👥 Người Dùng":
+            user_manager(users, user)
+        elif choice == "📊 Báo Cáo":
+            dashboard(tasks, user)
 
 if __name__ == "__main__":
     main()
